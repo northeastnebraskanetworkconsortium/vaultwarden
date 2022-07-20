@@ -1,0 +1,86 @@
+# docker-compose -f vaultwarden-compose.yaml
+
+version: "3"
+
+services:
+  traefik:
+    image: traefik:v2.5
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      - "--certificatesresolvers.resolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.resolver.acme.httpchallenge.entrypoint=web"
+      # change email below
+      - "--certificatesresolvers.resolver.acme.email=me@example.com"
+      - "--certificatesresolvers.resolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+
+  vaultwarden:
+    image: vaultwarden/server:1.25.0
+    container_name: vaultwarden
+    restart: always
+    volumes:
+      - ./bw-data:/data
+      - ./certs:/ssl
+      - ./logs:/log
+    expose:
+      - 80
+    environment:
+      WEBSOCKET_ENABLED: "true"
+      SIGNUPS_ALLOWED: "true"
+      LOG_FILE: "/log/bw.log"
+      # change url below
+      DOMAIN: "https://vault.example.com"
+      # update database url
+      DATABASE_URL: "mysql://user:password@mariadb/thevault"
+      ENABLE_DB_WAL: "false"
+
+      # Change to your info
+      SMTP_HOST: "smtp.example.org"
+      SMTP_FROM: "postmaster@example.com"
+      SMTP_FROM_NAME: "The Password Manager"
+      SMTP_USERNAME: "postmaster@example.com"
+      SMTP_PORT: "587"
+      SMTP_TLS: "true"
+      SMTP_PASSWORD: "cantguessme"
+
+      # Below gets you access to the admin interface
+      ADMIN_TOKEN: "muahahaha-defcantguessme"
+
+      # Some admin settings
+      INVITATION_ORG_NAME: "The Password Manager"
+      HIBP_API_KEY: "xxxxxxxxxxxxxxxxxx"
+    labels:
+      traefik.enable: true
+      # change url below
+      traefik.http.routers.bw.rule: "Host(`vault.example.com`)"
+      traefik.http.routers.bw.entrypoints: "websecure"
+      traefik.http.routers.bw.tls.certresolver: "resolver"
+
+
+  mariadb:
+    image: mariadb:10.7
+    container_name: mariadb
+    environment: 
+      MYSQL_DATABASE: "thevault"
+      MYSQL_USER: "user"
+      MYSQL_PASSWORD: "password"
+      MYSQL_ROOT_PASSWORD: "theotherpassword"
+    volumes:
+      - "mysql-data:/var/lib/mysql"
+
+volumes:
+  mysql-data:
+  letsencrypt:
